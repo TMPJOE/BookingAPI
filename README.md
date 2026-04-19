@@ -1,101 +1,180 @@
-# Hotel Microservice Blueprint
+# BookingAPI - API Gateway
 
-A lightweight Go microservice built with a clean architecture pattern, featuring PostgreSQL integration, structured logging, and HTTP request handling via `chi` router.
+A high-performance API Gateway built with Go, designed for hotel booking systems.
 
 ## Architecture
 
-The project follows a layered architecture:
-
 ```
-cmd/api/main.go        → Entry point, wires dependencies
-internal/handler       → HTTP handlers, routing, and middleware
-internal/service       → Business logic layer
-internal/repo          → Data access layer
-internal/database      → Database connection management
-internal/logging       → Structured logging setup
-internal/models        → Domain models
-internal/helper        → Utility functions
+cmd/gateway/main.go          # Application entry point
+internal/
+├── config/                  # Configuration management
+├── logging/                 # Structured logging
+└── gateway/
+    ├── handlers/            # HTTP request handlers
+    ├── middleware/          # Custom middleware (auth, rate limiting, CORS, etc.)
+    └── routing/             # Route definitions
+config.yaml                  # Configuration file
 ```
 
-## Tech Stack
+## Features
 
-- **Router**: [go-chi/chi/v5](https://github.com/go-chi/chi)
-- **Logging**: [go-chi/httplog/v3](https://github.com/go-chi/httplog) + `log/slog`
-- **Database**: [jackc/pgx/v5](https://github.com/jackc/pgx) (PostgreSQL connection pool)
+- **Rate Limiting**: Token bucket algorithm for request throttling
+- **Authentication**: Bearer token authentication middleware
+- **CORS**: Cross-Origin Resource Sharing support
+- **Security Headers**: XSS protection, HSTS, clickjacking prevention
+- **Circuit Breaker**: Fault tolerance for upstream services
+- **Health Checks**: `/health`, `/ready`, `/live` endpoints
+- **Structured Logging**: JSON logging with request tracing
 
-## Prerequisites
+## Quick Start
 
-- Go 1.25.7+
-- PostgreSQL database
-- Docker & Docker Compose (optional, for local development)
+### Prerequisites
 
-## Getting Started
+- Go 1.21+
+- PostgreSQL (optional, for persistence)
 
-### 1. Set Environment Variables
+### Installation
 
 ```bash
-export DATABASE_URL="postgres://user:password@localhost:5432/dbname?sslmode=disable"
+# Clone the repository
+git clone <repository-url>
+cd BookingAPI
+
+# Download dependencies
+go mod tidy
+
+# Run the application
+go run ./cmd/gateway
 ```
 
-### 2. Run the Service
+### Configuration
+
+Copy `.env.example` to `.env` and configure:
 
 ```bash
-go run app/cmd/api/main.go
+cp .env.example .env
 ```
 
-The server starts on `localhost:8000`.
+Or use `config.yaml` for YAML-based configuration.
 
-### 3. Test the Health Endpoint
+### Using Make
 
 ```bash
-curl http://localhost:8000/health
+make deps      # Download dependencies
+make run       # Run the application
+make build     # Build binary
+make test      # Run tests
+make lint      # Run linter
+make clean     # Clean build artifacts
 ```
 
-Response:
-```json
-{"status": "healthy"}
-```
+## API Endpoints
 
-## Docker Compose
+### Health Checks
 
-Use `docker-compose.yml` to spin up dependencies (e.g., PostgreSQL):
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Liveness check |
+| `/ready` | GET | Readiness check |
+| `/live` | GET | Liveness check |
+
+### API v1 (Requires Authentication)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/bookings` | GET | List all bookings |
+| `/api/v1/bookings` | POST | Create a booking |
+| `/api/v1/bookings/{id}` | GET | Get a booking |
+| `/api/v1/bookings/{id}` | PUT | Update a booking |
+| `/api/v1/bookings/{id}` | DELETE | Delete a booking |
+| `/api/v1/rooms` | GET | List all rooms |
+| `/api/v1/rooms/{id}` | GET | Get a room |
+| `/api/v1/guests` | GET | List all guests |
+| `/api/v1/guests/{id}` | GET | Get a guest |
+
+### Authentication
+
+Include the Bearer token in the Authorization header:
 
 ```bash
-docker-compose up -d
+curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/bookings
+```
+
+## Configuration Options
+
+### Server
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+```
+
+### Rate Limiting
+
+```yaml
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+```
+
+### Circuit Breaker
+
+```yaml
+circuit_breaker:
+  enabled: true
+  max_failures: 5
+  timeout: 30s
+```
+
+## Docker
+
+```bash
+# Build
+docker build -t booking-api-gateway .
+
+# Run
+docker run -p 8080:8080 booking-api-gateway
+```
+
+## Testing
+
+```bash
+# Run all tests
+go test -v ./...
+
+# Run with coverage
+go test -v -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
 ```
 
 ## Project Structure
 
-| Path | Description |
-|------|-------------|
-| `app/cmd/api/main.go` | Application entry point. Wires together database, repository, service, and handler layers, then starts the HTTP server. |
-| `app/internal/database/` | Database connection pool initialization using `pgx`. |
-| `app/internal/handler/` | HTTP handlers, request routing (`chi`), and middleware (security headers, request logging, cache control). |
-| `app/internal/service/` | Business logic layer. Defines service interfaces and implements use cases. |
-| `app/internal/repo/` | Data access layer. Handles all database queries and transactions. |
-| `app/internal/logging/` | Structured JSON logger configuration using `slog` and `httplog`. |
-| `app/internal/models/` | Domain models and data structures shared across layers. |
-| `app/internal/helper/` | Utility/helper functions used across the application. |
-| `app/sql/` | SQL migration files and queries. |
-| `app/test/` | Test files. |
-| `docker-compose.yml` | Docker Compose configuration for local development services. |
+```
+BookingAPI/
+├── cmd/
+│   └── gateway/
+│       └── main.go           # Application entry point
+├── internal/
+│   ├── config/               # Configuration loading
+│   ├── logging/              # Logger setup
+│   └── gateway/
+│       ├── handlers/         # HTTP handlers
+│       ├── middleware/       # Custom middleware
+│       └── routing/          # Route definitions
+├── config.yaml               # Configuration file
+├── Makefile                  # Build automation
+├── Dockerfile                # Docker image
+├── docker-compose.yml        # Docker Compose
+├── .env.example              # Environment template
+├── go.mod                    # Go module
+└── README.md                 # This file
+```
 
-## API Endpoints
+## License
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check endpoint. Returns service health status with database connectivity check. |
-
-## Adding New Features
-
-1. **Models**: Define structs in `app/internal/models/models.go`
-2. **Repository**: Add data access methods to `app/internal/repo/repo.go`
-3. **Service**: Add business logic methods to `app/internal/service/service.go` (update the `Service` interface)
-4. **Handler**: Add HTTP handler functions to `app/internal/handler/handlers.go`
-5. **Routing**: Register new routes in `app/internal/handler/routing.go`
-
-## Configuration
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string (required) |
+MIT

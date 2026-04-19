@@ -1,0 +1,41 @@
+# API Gateway Configuration
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+
+logging:
+  level: "info"
+  format: "json"
+
+database:
+  url: "${DB_URL}"
+  max_conns: 25
+  min_conns: 5
+
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+
+circuit_breaker:
+  enabled: true
+  max_failures: 5
+  timeout: 30s
+
+upstreams:
+  - name: "booking-service"
+    url: "http://localhost:8081"
+    timeout: 10s
+    health_path: "/health"
+  - name: "room-service"
+    url: "http://localhost:8082"
+    timeout: 10s
+    health_path: "/health"
+  - name: "guest-service"
+    url: "http://localhost:8083"
+    timeout: 10s
+    health_path: "/health"
