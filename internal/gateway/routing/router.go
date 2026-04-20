@@ -1,32 +1,64 @@
 package routing
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"hotel.com/bookingapi/internal/config"
 	"hotel.com/bookingapi/internal/gateway/handlers"
+	"hotel.com/bookingapi/internal/gateway/health"
 	gwmiddleware "hotel.com/bookingapi/internal/gateway/middleware"
+	"hotel.com/bookingapi/internal/gateway/proxy"
 	"hotel.com/bookingapi/internal/logging"
 )
 
+// Router holds the router and its dependencies
+type Router struct {
+	engine        *chi.Mux
+	proxy         *proxy.ReverseProxy
+	healthChecker *health.Checker
+}
+
 // NewRouter creates and configures the chi router with all routes and middleware
-func NewRouter(logger *logging.Logger, cfg *config.Config) *chi.Mux {
+func NewRouter(logger *logging.Logger, cfg *config.Config) *Router {
 	r := chi.NewRouter()
+
+	// Create dependencies
+	h := handlers.NewHandler(logger, cfg)
+	revProxy := proxy.NewReverseProxy(logger, cfg)
+	healthChecker := health.NewChecker(logger, cfg, 30*time.Second)
 
 	// Apply global middleware
 	applyGlobalMiddleware(r, logger, cfg)
 
-	// Create handlers
-	h := handlers.NewHandler(logger, cfg)
-
 	// Mount routes
-	mountRoutes(r, h)
+	mountRoutes(r, h, revProxy)
 
-	return r
+	// Start health checker
+	healthChecker.Start()
+
+	return &Router{
+		engine:        r,
+		proxy:         revProxy,
+		healthChecker: healthChecker,
+	}
+}
+
+// Mux returns the underlying chi.Mux
+func (rt *Router) Mux() *chi.Mux {
+	return rt.engine
+}
+
+// Stop stops the router and its dependencies
+func (rt *Router) Stop() {
+	if rt.healthChecker != nil {
+		rt.healthChecker.Stop()
+	}
 }
 
 // applyGlobalMiddleware applies global middleware to the router
@@ -37,7 +69,7 @@ func applyGlobalMiddleware(r *chi.Mux, logger *logging.Logger, cfg *config.Confi
 	// Request ID middleware
 	r.Use(middleware.RequestID)
 
-	// Logger middleware
+	// Real IP middleware
 	r.Use(middleware.RealIP)
 
 	// Timeout middleware
@@ -71,7 +103,7 @@ func applyGlobalMiddleware(r *chi.Mux, logger *logging.Logger, cfg *config.Confi
 }
 
 // mountRoutes mounts all API routes
-func mountRoutes(r *chi.Mux, h *handlers.Handler) {
+func mountRoutes(r *chi.Mux, h *handlers.Handler, revProxy *proxy.ReverseProxy) {
 	// Health check routes (no auth required)
 	r.Group(func(r chi.Router) {
 		r.Get("/health", h.HealthCheck)
@@ -79,45 +111,56 @@ func mountRoutes(r *chi.Mux, h *handlers.Handler) {
 		r.Get("/live", h.LivenessCheck)
 	})
 
-	// API v1 routes
+	// Upstream health status endpoint (no auth required)
+	r.Get("/upstreams", func(w http.ResponseWriter, r *http.Request) {
+		status := revProxy.GetAllUpstreams()
+		result := make([]map[string]interface{}, 0, len(status))
+		for _, s := range status {
+			result = append(result, map[string]interface{}{
+				"name":        s.Name,
+				"url":         s.URL,
+				"path_prefix": s.PathPrefix,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// API v1 routes - proxy to upstream services
 	r.Route("/api/v1", func(r chi.Router) {
 		// Apply authentication middleware to all API routes
 		r.Use(gwmiddleware.NewAuthMiddleware().Middleware())
 
-		// Booking routes
-		r.Route("/bookings", func(r chi.Router) {
-			r.Get("/", h.ListBookings)
-			r.Post("/", h.CreateBooking)
-			r.Get("/{id}", h.GetBooking)
-			r.Put("/{id}", h.UpdateBooking)
-			r.Delete("/{id}", h.DeleteBooking)
-		})
-
-		// Room routes
-		r.Route("/rooms", func(r chi.Router) {
-			r.Get("/", h.ListRooms)
-			r.Get("/{id}", h.GetRoom)
-			r.Post("/", h.CreateRoom)
-			r.Put("/{id}", h.UpdateRoom)
-			r.Delete("/{id}", h.DeleteRoom)
-		})
-
-		// Guest routes
-		r.Route("/guests", func(r chi.Router) {
-			r.Get("/", h.ListGuests)
-			r.Get("/{id}", h.GetGuest)
-			r.Post("/", h.CreateGuest)
-			r.Put("/{id}", h.UpdateGuest)
-			r.Delete("/{id}", h.DeleteGuest)
-		})
+		// All /api/v1/* requests go to the reverse proxy
+		// The proxy will route based on path prefix
+		r.Handle("/*", revProxy)
 	})
+}
 
-	// Proxy routes for upstream services
-	r.Route("/proxy", func(r chi.Router) {
-		r.Use(gwmiddleware.NewAuthMiddleware().Middleware())
-		r.Route("/{service}", func(r chi.Router) {
-			r.Handle("/*", h.ProxyHandler())
-			r.Handle("/", h.ProxyHandler())
-		})
-	})
+// ReadinessCheckWithUpstreams checks readiness including upstream services
+func ReadinessCheckWithUpstreams(ctx context.Context, healthChecker *health.Checker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		status := healthChecker.GetStatus()
+		healthyCount := 0
+		for _, s := range status {
+			if s.Healthy {
+				healthyCount++
+			}
+		}
+
+		response := map[string]interface{}{
+			"status":          "ready",
+			"healthy_count":   healthyCount,
+			"total_count":     len(status),
+			"upstream_status": status,
+		}
+
+		// If no upstreams are healthy, still report ready (degraded mode)
+		if healthyCount == 0 && len(status) > 0 {
+			response["status"] = "degraded"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+	}
 }

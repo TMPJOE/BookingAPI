@@ -63,6 +63,7 @@ type CircuitBreakerConfig struct {
 type UpstreamConfig struct {
 	Name       string        `yaml:"name"`
 	URL        string        `yaml:"url"`
+	PathPrefix string        `yaml:"path_prefix"` // e.g., "/api/v1/users"
 	Timeout    time.Duration `yaml:"timeout"`
 	HealthPath string        `yaml:"health_path"`
 }

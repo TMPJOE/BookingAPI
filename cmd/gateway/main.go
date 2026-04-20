@@ -30,13 +30,13 @@ func main() {
 		slog.String("version", "1.0.0"),
 	)
 
-	// Create HTTP server with chi router
+	// Create router with all middleware and routes
 	router := routing.NewRouter(logger, cfg)
 
 	// Create HTTP server
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      router.Mux(),
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
@@ -57,6 +57,9 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+
+	// Stop router (health checker, etc.)
+	router.Stop()
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -8,7 +8,7 @@ import (
 	"hotel.com/bookingapi/internal/logging"
 )
 
-// Handler holds all HTTP handlers
+// Handler holds all HTTP handlers for the thin gateway
 type Handler struct {
 	logger *logging.Logger
 	config *config.Config
@@ -34,7 +34,7 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // ReadinessCheck handles GET /ready
 func (h *Handler) ReadinessCheck(w http.ResponseWriter, r *http.Request) {
-	// TODO: Add actual readiness checks (database, upstream services)
+	// TODO: Add actual readiness checks (upstream services connectivity)
 	response := map[string]string{
 		"status": "ready",
 	}
@@ -47,78 +47,6 @@ func (h *Handler) LivenessCheck(w http.ResponseWriter, r *http.Request) {
 		"status": "alive",
 	}
 	respondJSON(w, http.StatusOK, response)
-}
-
-// Placeholder handlers for bookings
-func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{"bookings": []interface{}{}})
-}
-
-func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusCreated, map[string]string{"message": "booking created"})
-}
-
-func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "get booking"})
-}
-
-func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "booking updated"})
-}
-
-func (h *Handler) DeleteBooking(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusNoContent, nil)
-}
-
-// Placeholder handlers for rooms
-func (h *Handler) ListRooms(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{"rooms": []interface{}{}})
-}
-
-func (h *Handler) GetRoom(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "get room"})
-}
-
-func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusCreated, map[string]string{"message": "room created"})
-}
-
-func (h *Handler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "room updated"})
-}
-
-func (h *Handler) DeleteRoom(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusNoContent, nil)
-}
-
-// Placeholder handlers for guests
-func (h *Handler) ListGuests(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{"guests": []interface{}{}})
-}
-
-func (h *Handler) GetGuest(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "get guest"})
-}
-
-func (h *Handler) CreateGuest(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusCreated, map[string]string{"message": "guest created"})
-}
-
-func (h *Handler) UpdateGuest(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"message": "guest updated"})
-}
-
-func (h *Handler) DeleteGuest(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusNoContent, nil)
-}
-
-// ProxyHandler returns a handler that proxies requests to upstream services
-func (h *Handler) ProxyHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respondJSON(w, http.StatusOK, map[string]string{
-			"message": "proxy endpoint - implement upstream proxy logic",
-		})
-	})
 }
 
 // respondJSON sends a JSON response

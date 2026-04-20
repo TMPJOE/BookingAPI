@@ -11,11 +11,6 @@ logging:
   level: "info"
   format: "json"
 
-database:
-  url: "${DB_URL}"
-  max_conns: 25
-  min_conns: 5
-
 rate_limit:
   enabled: true
   requests_per_second: 100
@@ -27,15 +22,33 @@ circuit_breaker:
   timeout: 30s
 
 upstreams:
-  - name: "booking-service"
+  - name: "users-service"
     url: "http://localhost:8081"
+    path_prefix: "/api/v1/users"
     timeout: 10s
     health_path: "/health"
-  - name: "room-service"
+  - name: "hotels-service"
     url: "http://localhost:8082"
+    path_prefix: "/api/v1/hotels"
     timeout: 10s
     health_path: "/health"
-  - name: "guest-service"
+  - name: "rooms-service"
     url: "http://localhost:8083"
+    path_prefix: "/api/v1/rooms"
+    timeout: 10s
+    health_path: "/health"
+  - name: "bookings-service"
+    url: "http://localhost:8084"
+    path_prefix: "/api/v1/bookings"
+    timeout: 10s
+    health_path: "/health"
+  - name: "payments-service"
+    url: "http://localhost:8085"
+    path_prefix: "/api/v1/payments"
+    timeout: 10s
+    health_path: "/health"
+  - name: "notifications-service"
+    url: "http://localhost:8086"
+    path_prefix: "/api/v1/notifications"
     timeout: 10s
     health_path: "/health"
