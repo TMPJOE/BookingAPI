@@ -37,7 +37,7 @@ func NewRouter(logger *logging.Logger, cfg *config.Config) *Router {
 	applyGlobalMiddleware(r, logger, cfg)
 
 	// Mount routes
-	mountRoutes(r, h, revProxy)
+	mountRoutes(r, h, revProxy, cfg)
 
 	// Start health checker
 	healthChecker.Start()
@@ -103,7 +103,7 @@ func applyGlobalMiddleware(r *chi.Mux, logger *logging.Logger, cfg *config.Confi
 }
 
 // mountRoutes mounts all API routes
-func mountRoutes(r *chi.Mux, h *handlers.Handler, revProxy *proxy.ReverseProxy) {
+func mountRoutes(r *chi.Mux, h *handlers.Handler, revProxy *proxy.ReverseProxy, cfg *config.Config) {
 	// Health check routes (no auth required)
 	r.Group(func(r chi.Router) {
 		r.Get("/health", h.HealthCheck)
@@ -126,10 +126,19 @@ func mountRoutes(r *chi.Mux, h *handlers.Handler, revProxy *proxy.ReverseProxy) 
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// API v1 routes - proxy to upstream services
+	r.Group(func(r chi.Router) {
+		r.Handle("/api/v1/users/*", revProxy)
+	})
+
+	// Protected API v1 routes - auth required
 	r.Route("/api/v1", func(r chi.Router) {
-		// Apply authentication middleware to all API routes
-		r.Use(gwmiddleware.NewAuthMiddleware().Middleware())
+		// Apply authentication middleware FIRST (before any routes)
+		jwtConfig := gwmiddleware.JWTConfig{
+			Secret:     cfg.JWT.Secret,
+			Issuer:     cfg.JWT.Issuer,
+			Expiration: cfg.JWT.Expiration,
+		}
+		r.Use(gwmiddleware.NewAuthMiddleware(jwtConfig).Middleware())
 
 		// All /api/v1/* requests go to the reverse proxy
 		// The proxy will route based on path prefix

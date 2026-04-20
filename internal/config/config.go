@@ -13,6 +13,7 @@ type Config struct {
 	Server         ServerConfig         `yaml:"server"`
 	Logging        LoggingConfig        `yaml:"logging"`
 	Database       DatabaseConfig       `yaml:"database"`
+	JWT            JWTConfig            `yaml:"jwt"`
 	RateLimit      RateLimitConfig      `yaml:"rate_limit"`
 	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
 	Upstreams      []UpstreamConfig     `yaml:"upstreams"`
@@ -43,6 +44,13 @@ type DatabaseConfig struct {
 	URL      string `yaml:"url"`
 	MaxConns int    `yaml:"max_conns"`
 	MinConns int    `yaml:"min_conns"`
+}
+
+// JWTConfig holds JWT authentication configuration
+type JWTConfig struct {
+	Secret     string        `yaml:"secret"`
+	Issuer     string        `yaml:"issuer"`
+	Expiration time.Duration `yaml:"expiration"`
 }
 
 // RateLimitConfig holds rate limiting configuration
@@ -120,5 +128,8 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.CircuitBreaker.Timeout == 0 {
 		cfg.CircuitBreaker.Timeout = 30 * time.Second
+	}
+	if cfg.JWT.Expiration == 0 {
+		cfg.JWT.Expiration = 24 * time.Hour
 	}
 }

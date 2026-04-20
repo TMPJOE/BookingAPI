@@ -23,32 +23,32 @@ circuit_breaker:
 
 upstreams:
   - name: "users-service"
-    url: "http://localhost:8081"
+    url: "http://users-service:8081"
     path_prefix: "/api/v1/users"
     timeout: 10s
     health_path: "/health"
   - name: "hotels-service"
-    url: "http://localhost:8082"
+    url: "http://hotels-service:8082"
     path_prefix: "/api/v1/hotels"
     timeout: 10s
     health_path: "/health"
   - name: "rooms-service"
-    url: "http://localhost:8083"
+    url: "http://rooms-service:8083"
     path_prefix: "/api/v1/rooms"
     timeout: 10s
     health_path: "/health"
   - name: "bookings-service"
-    url: "http://localhost:8084"
+    url: "http://bookings-service:8084"
     path_prefix: "/api/v1/bookings"
     timeout: 10s
     health_path: "/health"
   - name: "payments-service"
-    url: "http://localhost:8085"
+    url: "http://payments-service:8085"
     path_prefix: "/api/v1/payments"
     timeout: 10s
     health_path: "/health"
   - name: "notifications-service"
-    url: "http://localhost:8086"
+    url: "http://notifications-service:8086"
     path_prefix: "/api/v1/notifications"
     timeout: 10s
     health_path: "/health"
