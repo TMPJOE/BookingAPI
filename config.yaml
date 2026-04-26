@@ -23,31 +23,31 @@ circuit_breaker:
 
 upstreams:
   - name: "users-service"
-    url: "http://user-service:8081"
+    url: "http://user-service:8080"
     path_prefix: "/api/v1/users"
     timeout: 10s
     health_path: "/health"
 
   - name: "hotels-service"
-    url: "http://hotel-service:8084"
+    url: "http://hotel-service:8080"
     path_prefix: "/api/v1/hotels"
     timeout: 10s
     health_path: "/health"
 
   - name: "rooms-service"
-    url: "http://rooms-service:8085"
+    url: "http://rooms-service:8080"
     path_prefix: "/api/v1/rooms"
     timeout: 10s
     health_path: "/health"
 
   - name: "bookings-service"
-    url: "http://booking-service:8086"
+    url: "http://booking-service:8080"
     path_prefix: "/api/v1/bookings"
     timeout: 10s
     health_path: "/health"
 
   - name: "media-service"
-    url: "http://media-service:8082"
+    url: "http://media-service:8080"
     path_prefix: "/api/v1/media"
     timeout: 10s
     health_path: "/health"
