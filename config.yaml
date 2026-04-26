@@ -29,25 +29,25 @@ upstreams:
     health_path: "/health"
 
   - name: "hotels-service"
-    url: "http://hotel-service:8080"
+    url: "http://hotel-service:8084"
     path_prefix: "/api/v1/hotels"
     timeout: 10s
     health_path: "/health"
 
   - name: "rooms-service"
-    url: "http://rooms-service:8080"
+    url: "http://rooms-service:8085"
     path_prefix: "/api/v1/rooms"
     timeout: 10s
     health_path: "/health"
 
   - name: "bookings-service"
-    url: "http://booking-service:8080"
+    url: "http://booking-service:8086"
     path_prefix: "/api/v1/bookings"
     timeout: 10s
     health_path: "/health"
 
   - name: "media-service"
-    url: "http://media-service:8080"
+    url: "http://media-service:8082"
     path_prefix: "/api/v1/media"
     timeout: 10s
     health_path: "/health"
