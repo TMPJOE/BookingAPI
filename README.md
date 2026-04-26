@@ -1,68 +1,230 @@
-# BookingAPI - API Gateway
+# 🌐 API Gateway (BookingAPI)
 
-A high-performance API Gateway built with Go, designed for hotel booking systems. The gateway provides routing, authentication, rate limiting, and health monitoring for microservices.
+> Reverse-proxy API gateway that routes, authenticates, and rate-limits all incoming traffic for the Hotel Reservation Platform.
+
+## Overview
+
+The API Gateway (BookingAPI) is the **single entry point** for all client traffic. It acts as a reverse proxy, routing requests to the appropriate upstream microservice based on URL path prefixes. It provides centralized cross-cutting concerns: JWT authentication, rate limiting, CORS, security headers, request logging, and upstream health monitoring.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Go 1.25 |
+| Router | [go-chi/chi](https://github.com/go-chi/chi) v5 |
+| Proxy | `net/http/httputil` (stdlib reverse proxy) |
+| Auth | JWT verification (RSA-256 public key) |
+| Container | Docker (multi-stage Alpine build) |
 
 ## Architecture
 
 ```
-cmd/gateway/main.go # Application entry point
-internal/
-├── config/ # Configuration management
-├── logging/ # Structured logging
+cmd/
 └── gateway/
-    ├── handlers/ # HTTP request handlers
-    ├── health/ # Upstream health monitoring
-    ├── middleware/ # Custom middleware (auth, rate limiting, CORS, security, logging, request ID)
-    ├── proxy/ # Reverse proxy for upstream routing
-    └── routing/ # Route definitions using chi router
-config.yaml # Configuration file
+    └── main.go           # Application entrypoint
+internal/
+├── config/               # YAML config loader
+├── logging/              # Structured slog logger
+└── gateway/
+    ├── handlers/         # Health check handlers
+    │   └── handler.go
+    ├── health/           # Periodic upstream health checker
+    │   └── health.go
+    ├── middleware/        # Middleware stack
+    │   ├── auth.go       # JWT authentication
+    │   ├── cors.go       # CORS headers
+    │   ├── logging.go    # Request logging
+    │   ├── ratelimit.go  # Token bucket rate limiter
+    │   ├── requestid.go  # X-Request-ID injection
+    │   └── security.go   # Security headers (CSP, HSTS, etc.)
+    ├── proxy/            # Reverse proxy engine
+    │   └── proxy.go
+    └── routing/          # Route configuration
+        └── router.go
+config.yaml               # Gateway configuration
+Dockerfile
+go.mod
 ```
 
-## Features
+## Routing Table
 
-- **Rate Limiting**: Token bucket algorithm for request throttling
-- **Authentication**: Bearer token authentication middleware
-- **CORS**: Cross-Origin Resource Sharing support
-- **Security Headers**: XSS protection, HSTS, clickjacking prevention, CSP, and more
-- **Circuit Breaker**: Fault tolerance for upstream services
-- **Health Checks**: `/health`, `/ready`, `/live` endpoints with upstream monitoring
-- **Upstream Status**: `/upstreams` endpoint to view all upstream service statuses
-- **Structured Logging**: JSON logging with request tracing using slog
-- **Reverse Proxy**: Path-based routing to upstream microservices
-- **Request ID**: Automatic request ID generation and propagation
-- **Real IP**: Client IP extraction from proxy headers
+The gateway routes requests based on **longest path prefix match**:
 
-## Quick Start
+| Path Prefix | Upstream Service | Auth Required |
+|---|---|---|
+| `/api/v1/users/*` | `http://user-service:8080` | ❌ (public registration/login) |
+| `/api/v1/hotels/*` | `http://hotel-service:8080` | ✅ |
+| `/api/v1/rooms/*` | `http://rooms-service:8080` | ✅ |
+| `/api/v1/bookings/*` | `http://booking-service:8080` | ✅ |
+| `/api/v1/*` (catch-all) | `http://bff-service:8080` | ✅ |
+| `/health` | Self (gateway) | ❌ |
+| `/ready` | Self (gateway) | ❌ |
+| `/live` | Self (gateway) | ❌ |
+| `/upstreams` | Self (returns upstream list) | ❌ |
 
-### Prerequisites
+> **Note**: The `/api/v1/users/*` route is **unprotected** to allow registration and login without a JWT.
 
-- Go 1.25+
-- Upstream microservices (configured in `config.yaml`)
+## Flow Diagram
 
-### Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd BookingAPI
-
-# Download dependencies
-go mod tidy
-
-# Run the application
-go run ./cmd/gateway
+```mermaid
+flowchart TD
+    A["Client Request"] --> B["Global Middleware Stack"]
+    
+    subgraph "Middleware Pipeline"
+        B --> B1["Recoverer (panic recovery)"]
+        B1 --> B2["RequestID"]
+        B2 --> B3["RealIP"]
+        B3 --> B4["Timeout"]
+        B4 --> B5["Request Logger"]
+        B5 --> B6["Rate Limiter"]
+        B6 --> B7["CORS"]
+        B7 --> B8["Security Headers"]
+    end
+    
+    B8 --> C{"Path Match?"}
+    
+    C -->|"/health, /ready, /live"| D["Health Handlers"]
+    C -->|"/upstreams"| E["Return Upstream List"]
+    C -->|"/api/v1/users/*"| F["Reverse Proxy (no auth)"]
+    C -->|"/api/v1/*"| G["JWT Auth Middleware"]
+    C -->|No Match| H["404 Not Found"]
+    
+    G --> G1{"Token Valid?"}
+    G1 -->|No| G2["401 Unauthorized"]
+    G1 -->|Yes| I["Reverse Proxy"]
+    
+    subgraph "Reverse Proxy"
+        I --> I1["Find Upstream by Prefix"]
+        I1 --> I2["Strip Path Prefix"]
+        I2 --> I3["Forward to Upstream"]
+        I3 --> I4["Return Upstream Response"]
+    end
+    
+    F --> I1
 ```
 
-Or using Make:
+## Use Case Diagram
 
-```bash
-make deps # Download dependencies
-make run  # Run the application
+```mermaid
+graph LR
+    subgraph Actors
+        Client["🖥️ Frontend Client"]
+        Dev["👨‍💻 Developer"]
+    end
+    
+    subgraph "API Gateway"
+        UC1["Route to Upstream"]
+        UC2["Authenticate Request"]
+        UC3["Rate Limit Traffic"]
+        UC4["Log Requests"]
+        UC5["Health Check"]
+        UC6["CORS Preflight"]
+        UC7["Monitor Upstreams"]
+    end
+    
+    Client --> UC1
+    Client --> UC2
+    Client --> UC3
+    Client --> UC6
+    Dev --> UC5
+    Dev --> UC7
 ```
 
-### Configuration
+## State Diagram
 
-Edit `config.yaml` for YAML-based configuration:
+```mermaid
+stateDiagram-v2
+    [*] --> Starting
+    Starting --> Ready : All upstreams healthy
+    Starting --> Degraded : Some upstreams unhealthy
+    Ready --> Degraded : Upstream health check fails
+    Degraded --> Ready : Upstream recovers
+    Ready --> ShuttingDown : SIGTERM/SIGINT
+    Degraded --> ShuttingDown : SIGTERM/SIGINT
+    ShuttingDown --> [*] : Graceful shutdown (30s timeout)
+    
+    state Ready {
+        [*] --> Routing
+        Routing --> Proxying : Match found
+        Proxying --> Routing : Response sent
+    }
+```
+
+## Package Diagram
+
+```mermaid
+graph TB
+    subgraph "cmd/gateway"
+        Main["main.go"]
+    end
+    
+    subgraph "internal"
+        subgraph "config"
+            Config["config.go"]
+        end
+        
+        subgraph "logging"
+            Logger["logger.go"]
+        end
+        
+        subgraph "gateway"
+            subgraph "routing"
+                Router["router.go"]
+            end
+            
+            subgraph "proxy"
+                RevProxy["proxy.go"]
+            end
+            
+            subgraph "middleware"
+                Auth["auth.go"]
+                CORSmw["cors.go"]
+                Logging["logging.go"]
+                RateLimit["ratelimit.go"]
+                ReqID["requestid.go"]
+                Security["security.go"]
+            end
+            
+            subgraph "handlers"
+                Handlers["handler.go"]
+            end
+            
+            subgraph "health"
+                HealthCheck["health.go"]
+            end
+        end
+    end
+    
+    Main --> Config
+    Main --> Logger
+    Main --> Router
+    
+    Router --> Handlers
+    Router --> RevProxy
+    Router --> Auth
+    Router --> CORSmw
+    Router --> Logging
+    Router --> RateLimit
+    Router --> ReqID
+    Router --> Security
+    Router --> HealthCheck
+    
+    RevProxy --> Config
+```
+
+## Middleware Stack (Order)
+
+1. **Recoverer** — Catches panics, returns 500
+2. **RequestID** — Injects `X-Request-ID` header
+3. **RealIP** — Extracts real client IP from proxy headers
+4. **Timeout** — Enforces `read_timeout` from config
+5. **Request Logger** — Logs method, path, remote_addr
+6. **Rate Limiter** — Token bucket (100 req/s, burst 200)
+7. **CORS** — Permissive cross-origin policy
+8. **Security Headers** — CSP, HSTS, X-Frame-Options, etc.
+9. **JWT Auth** — (only on `/api/v1/*` routes, except users)
+
+## Configuration
 
 ```yaml
 server:
@@ -72,166 +234,23 @@ server:
   write_timeout: 15s
   idle_timeout: 60s
 
-upstreams:
-  - name: "bookings-service"
-    url: "http://localhost:8084"
-    path_prefix: "/api/v1/bookings"
-    timeout: 10s
-    health_path: "/health"
-```
-
-## Using Make
-
-```bash
-make deps         # Download dependencies
-make run          # Run the application
-make build        # Build binary
-make test         # Run tests with race detection
-make test-coverage # Run tests with coverage report
-make lint         # Run linter
-make fmt          # Format code
-make tidy         # Tidy dependencies
-make clean        # Clean build artifacts
-```
-
-## API Endpoints
-
-### Health Checks
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Liveness check |
-| `/ready` | GET | Readiness check |
-| `/live` | GET | Liveness check |
-| `/upstreams` | GET | View upstream service status |
-
-### API v1 (Requires Authentication)
-
-All `/api/v1/*` requests are proxied to upstream services based on path prefix:
-
-| Path Prefix | Upstream Service |
-|-------------|------------------|
-| `/api/v1/users` | Users Service |
-| `/api/v1/hotels` | Hotels Service |
-| `/api/v1/rooms` | Rooms Service |
-| `/api/v1/bookings` | Bookings Service |
-| `/api/v1/payments` | Payments Service |
-| `/api/v1/notifications` | Notifications Service |
-
-### Authentication
-
-Include the Bearer token in the Authorization header:
-
-```bash
-curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/bookings
-```
-
-## Configuration Options
-
-### Server
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
-  read_timeout: 15s
-  write_timeout: 15s
-  idle_timeout: 60s
-```
-
-### Logging
-
-```yaml
-logging:
-  level: "info"    # debug, info, warn, error
-  format: "json"   # json, text
-```
-
-### Rate Limiting
-
-```yaml
 rate_limit:
   enabled: true
   requests_per_second: 100
   burst: 200
-```
 
-### Circuit Breaker
-
-```yaml
-circuit_breaker:
-  enabled: true
-  max_failures: 5
-  timeout: 30s
-```
-
-### Upstreams
-
-```yaml
 upstreams:
-  - name: "bookings-service"
-    url: "http://localhost:8084"
-    path_prefix: "/api/v1/bookings"
+  - name: "users-service"
+    url: "http://user-service:8080"
+    path_prefix: "/api/v1/users"
     timeout: 10s
     health_path: "/health"
+  # ... more upstreams
 ```
 
-## Docker
+## Port Mapping
 
-```bash
-# Build
-docker build -t booking-api-gateway .
-
-# Run
-docker run -p 8080:8080 booking-api-gateway
-```
-
-## Testing
-
-```bash
-# Run all tests with race detection
-go test -v -race ./...
-
-# Run with coverage
-go test -v -race -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out -o coverage.html
-```
-
-## Project Structure
-
-```
-BookingAPI/
-├── cmd/
-│   └── gateway/
-│       └── main.go          # Application entry point
-├── internal/
-│   ├── config/              # Configuration loading
-│   │   └── config.go
-│   ├── logging/             # Logger setup
-│   │   └── logger.go
-│   └── gateway/
-│       ├── handlers/        # HTTP handlers
-│       │   └── handler.go
-│       ├── health/          # Upstream health monitoring
-│       │   └── health.go
-│       ├── middleware/      # Custom middleware
-│       │   ├── auth.go
-│       │   ├── cors.go
-│       │   ├── logging.go
-│       │   ├── ratelimit.go
-│       │   ├── requestid.go
-│       │   └── security.go
-│       ├── proxy/           # Reverse proxy
-│       │   └── proxy.go
-│       └── routing/         # Route definitions
-│           └── router.go
-├── config.yaml              # Configuration file
-├── Makefile                 # Build automation
-├── Dockerfile               # Docker image
-├── go.mod                   # Go module
-└── README.md                # This file
-```
-
-## License
-
-MIT
+| Context | Port |
+|---|---|
+| Internal (container) | `8080` |
+| External (host) | `8080` |
