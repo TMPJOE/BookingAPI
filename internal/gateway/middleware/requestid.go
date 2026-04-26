@@ -20,7 +20,12 @@ func GetRequestID(r *http.Request) string {
 // requestIDKey is the context key for request ID
 const requestIDKey = "X-Request-Id"
 
-// GenerateRequestID generates a new UUID for request identification
+// GenerateRequestID generates a new UUID v7 for request identification
 func GenerateRequestID() string {
-	return uuid.New().String()
+	id, err := uuid.NewV7()
+	if err != nil {
+		// Fallback to random UUID if V7 fails
+		id = uuid.New()
+	}
+	return id.String()
 }
