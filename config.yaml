@@ -57,3 +57,9 @@ upstreams:
     path_prefix: "/api/v1"
     timeout: 10s
     health_path: "/health"
+
+  - name: "notifications-service"
+    url: "http://notification-service:8080"
+    path_prefix: "/api/v1/notifications"
+    timeout: 10s
+    health_path: "/health"
